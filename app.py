@@ -556,7 +556,7 @@ if st.button("Predict"):
             
             # Calculate historical volatility
             price_returns = data['Close'].pct_change().dropna()
-            volatility = price_returns.std() * 100  # Convert to percentage
+            volatility = float(price_returns.std() * 100)  # Convert to percentage (ensure scalar)
             
             # Method 1: Movement-based confidence (simple)
             # Confidence increases with magnitude of predicted change
