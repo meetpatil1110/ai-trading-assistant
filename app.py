@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
+import pickle
 
 if "run_prediction" not in st.session_state:
     st.session_state.run_prediction = False
@@ -499,55 +500,77 @@ if st.button("Predict"):
             st.plotly_chart(fig_equity, width='stretch')
 
             # ========== AI MODEL PREDICTION ==========
-            # 🤖 Model Prediction
-            # -------------------------------
-            # IMPORTANT: Current model architecture uses only Close price
-            # Future Enhancement: Retrain model with features ['Close', 'RSI', 'MACD', 'MA_20', 'MA_50']
-            # This would require:
-            #   1. Reshape features: (samples, 60) → (samples, 60, 5)
-            #   2. Retrain LSTM with multi-feature input
-            #   3. Update scaler to handle 5 features
+            st.markdown("---")
+            st.subheader("🤖 AI LSTM Price Prediction")
             
-            # NOTE: In production, fit scaler ONLY on training set to avoid data leakage
-            # Current approach: fits on full dataset (demo only, not production-ready)
-            scaler = MinMaxScaler()
-            scaled_data = scaler.fit_transform(data[['Close']])
-
-            X = []
-            for i in range(60, len(scaled_data)):
-                X.append(scaled_data[i-60:i])
-
-            X = np.array(X)
-
+            # Load pre-trained scaler and model
+            try:
+                with open('backend/scaler.pkl', 'rb') as f:
+                    scaler = pickle.load(f)
+            except FileNotFoundError:
+                st.error("❌ Scaler file not found. Please ensure backend/scaler.pkl exists.")
+                st.stop()
+            except Exception as e:
+                st.error(f"❌ Error loading scaler: {str(e)}")
+                st.stop()
+            
+            # Load pre-trained LSTM model
             try:
                 model = load_model("lstm_model.h5")
             except FileNotFoundError:
-                st.error("Model file not found. Please ensure lstm_model.h5 is in the project directory.")
+                st.error("❌ Model file not found. Please ensure lstm_model.h5 is in the project directory.")
                 st.stop()
             except Exception as e:
-                st.error(f"Error loading model: {str(e)}")
+                st.error(f"❌ Error loading model: {str(e)}")
                 st.stop()
-
-            predictions = model.predict(X, verbose=0)
-            predicted_prices = scaler.inverse_transform(predictions)
-
-            latest_pred = predicted_prices[-1][0]
-            # Use original data for latest actual price (latest market close, not affected by rolling averages)
-            latest_actual = float(data['Close'].iloc[-1])
             
-            # Calculate metrics
-            change = float((latest_pred - latest_actual) / latest_actual)
-            delta = latest_pred - latest_actual
+            # Prepare input: last 60 days of Close prices
+            close_prices = data[['Close']].values
+            
+            # Scale using pre-trained scaler
+            scaled_data = scaler.transform(close_prices)
+            
+            # Create input sequence: (1, 60, 1) - last 60 days, 1 feature
+            X = np.array([scaled_data[-60:]])
+            
+            # Make prediction
+            prediction_scaled = model.predict(X, verbose=0)
+            
+            # Inverse transform to get actual price
+            predicted_prices = scaler.inverse_transform(prediction_scaled)
+            predicted_price = float(predicted_prices[0][0])
+
+            # Current market price (latest close)
+            current_price = float(data['Close'].iloc[-1])
+            
+            # Calculate expected change %
+            price_change = predicted_price - current_price
+            price_change_pct = (price_change / current_price) * 100
             
             # Get high and low for the period
             period_high = float(plot_df['High'].max())
             period_low = float(plot_df['Low'].min())
 
-            # -------------------------------
-            # 📊 Enhanced Result Display
-            # -------------------------------
+            # ========== TRADING SIGNAL LOGIC ==========
+            # BUY if predicted rise > 2%
+            # SELL if predicted fall < -2%
+            # HOLD otherwise
+            if price_change_pct > 2.0:
+                trading_signal = "🟢 BUY"
+                signal_emoji = "🟢"
+                signal_reason = f"Price expected to rise by {price_change_pct:.2f}%"
+            elif price_change_pct < -2.0:
+                trading_signal = "🔴 SELL"
+                signal_emoji = "🔴"
+                signal_reason = f"Price expected to fall by {abs(price_change_pct):.2f}%"
+            else:
+                trading_signal = "🟡 HOLD"
+                signal_emoji = "🟡"
+                signal_reason = f"Expected change {price_change_pct:.2f}% (minimal movement)"
+
+            # ========== PREDICTION DISPLAY ==========
             st.markdown("---")
-            st.subheader("🤖 AI Prediction & Technical Analysis")
+            st.subheader("🤖 AI LSTM Prediction Results")
 
             # Get latest technical values
             latest_rsi = float(plot_df['RSI'].iloc[-1])
@@ -555,14 +578,14 @@ if st.button("Predict"):
             latest_macd_signal = float(plot_df['MACD_Signal'].iloc[-1])
             latest_histogram = float(plot_df['Histogram'].iloc[-1])
 
-            # Metrics row
+            # Metrics row - AI Prediction Results
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                st.metric("📊 Current Price", f"₹{latest_actual:.2f}")
+                st.metric("📊 Current Price", f"₹{current_price:.2f}")
             with col2:
-                st.metric("🎯 Predicted Price", f"₹{latest_pred:.2f}", 
-                         delta=f"₹{delta:.2f}" if delta != 0 else "No change")
+                st.metric("🎯 Predicted Price", f"₹{predicted_price:.2f}", 
+                         delta=f"₹{price_change:.2f}" if price_change != 0 else "No change")
             with col3:
                 st.metric("📈 Period High", f"₹{period_high:.2f}")
             with col4:
@@ -589,22 +612,22 @@ if st.button("Predict"):
             st.markdown("---")
             st.subheader("📢 AI Trading Signal")
 
-            # Signal with more details
+            # Display the trading signal prominently
             col_signal1, col_signal2 = st.columns([2, 1])
             
             with col_signal1:
-                if change > 0.02:
-                    st.success(f"🟢 **BUY Signal** - Price expected to rise by {round(change * 100, 2)}%")
-                elif change < -0.02:
-                    st.error(f"🔴 **SELL Signal** - Price expected to fall by {round(abs(change) * 100, 2)}%")
-                else:
-                    st.warning(f"🟡 **HOLD Signal** - Minimal change expected ({round(change * 100, 2)}%)")
+                if "BUY" in trading_signal:
+                    st.success(f"{trading_signal} - {signal_reason}")
+                elif "SELL" in trading_signal:
+                    st.error(f"{trading_signal} - {signal_reason}")
+                else:  # HOLD
+                    st.warning(f"{trading_signal} - {signal_reason}")
             
             with col_signal2:
                 # Calculate real confidence based on MA convergence strength
                 # When MAs converge = strong trend = higher confidence
-                ma_diff = abs(plot_df['MA_20'].iloc[-1] - plot_df['MA_50'].iloc[-1])
-                ma_distance = ma_diff / plot_df['MA_50'].iloc[-1] * 100
+                ma_diff_val = abs(plot_df['MA_20'].iloc[-1] - plot_df['MA_50'].iloc[-1])
+                ma_distance = ma_diff_val / plot_df['MA_50'].iloc[-1] * 100
                 # Confidence: 100 when MAs fully converged, decreases as they diverge
                 confidence = max(0, 100 - (ma_distance * 10))
                 st.metric("Confidence", f"{min(confidence, 100):.1f}%")
@@ -618,9 +641,10 @@ if st.button("Predict"):
             with analysis_cols[0]:
                 st.info(f"""
                 **Price Prediction:**
-                • Current: ₹{latest_actual:.2f}
-                • Predicted: ₹{latest_pred:.2f}
-                • Expected Change: {round(change * 100, 2)}%
+                • Current: ₹{current_price:.2f}
+                • Predicted: ₹{predicted_price:.2f}
+                • Expected Change: {price_change_pct:.2f}%
+                • Signal: {trading_signal}
                 
                 **Strategy Performance:**
                 • Initial Capital: ₹{initial_capital:,}
@@ -645,6 +669,7 @@ if st.button("Predict"):
                 • Drawdown shows max loss: {max_drawdown * 100:.2f}%
                 """)
 
+
 # Footer
 st.markdown("---")
-st.caption("Built with ❤️ using Machine Learning & Deep Learning")
+st.caption("Built using Machine Learning & Deep Learning")
