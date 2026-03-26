@@ -636,4 +636,4 @@ if st.button("Predict"):
 
 # Footer
 st.markdown("---")
-st.caption("Built with ❤️ using Machine Learning & Deep Learning")
+st.caption("Built using Machine Learning & Deep Learning")
