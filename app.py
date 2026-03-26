@@ -550,6 +550,33 @@ if st.button("Predict"):
             # Get high and low for the period
             period_high = float(plot_df['High'].max())
             period_low = float(plot_df['Low'].min())
+            
+            # ========== CONFIDENCE CALCULATION ==========
+            # Confidence based on predicted price movement relative to volatility
+            
+            # Calculate historical volatility
+            price_returns = data['Close'].pct_change().dropna()
+            volatility = price_returns.std() * 100  # Convert to percentage
+            
+            # Method 1: Movement-based confidence (simple)
+            # Confidence increases with magnitude of predicted change
+            movement_confidence = min(abs(price_change_pct) * 25, 100)
+            
+            # Method 2: Volatility-relative confidence (advanced)
+            # Compare predicted move to market volatility
+            if volatility > 0.01:  # Avoid division by very small numbers
+                vol_relative_confidence = min((abs(price_change_pct) / volatility) * 50, 100)
+            else:
+                vol_relative_confidence = movement_confidence
+            
+            # Combined confidence: 60% weight on volatility-relative, 40% on pure movement
+            # This balances signal strength with market context
+            confidence = (vol_relative_confidence * 0.6) + (movement_confidence * 0.4)
+            confidence = max(0, min(confidence, 100))  # Clamp to [0, 100]
+            
+            # Handle any NaN edge cases
+            if pd.isna(confidence) or np.isnan(confidence):
+                confidence = 50.0  # Default neutral confidence
 
             # ========== TRADING SIGNAL LOGIC ==========
             # BUY if predicted rise > 2%
@@ -624,13 +651,19 @@ if st.button("Predict"):
                     st.warning(f"{trading_signal} - {signal_reason}")
             
             with col_signal2:
-                # Calculate real confidence based on MA convergence strength
-                # When MAs converge = strong trend = higher confidence
-                ma_diff_val = abs(plot_df['MA_20'].iloc[-1] - plot_df['MA_50'].iloc[-1])
-                ma_distance = ma_diff_val / plot_df['MA_50'].iloc[-1] * 100
-                # Confidence: 100 when MAs fully converged, decreases as they diverge
-                confidence = max(0, 100 - (ma_distance * 10))
-                st.metric("Confidence", f"{min(confidence, 100):.1f}%")
+                # Display confidence with color-coding
+                if confidence > 70:
+                    confidence_color = "🟢"  # Green - high confidence
+                    confidence_level = "High"
+                elif confidence >= 40:
+                    confidence_color = "🟡"  # Yellow - medium confidence
+                    confidence_level = "Medium"
+                else:
+                    confidence_color = "🔴"  # Red - low confidence
+                    confidence_level = "Low"
+                
+                st.metric("Confidence", f"{confidence:.1f}%", 
+                         delta=f"{confidence_color} {confidence_level}")
 
             # Indicator Analysis Summary
             st.markdown("---")
@@ -645,6 +678,7 @@ if st.button("Predict"):
                 • Predicted: ₹{predicted_price:.2f}
                 • Expected Change: {price_change_pct:.2f}%
                 • Signal: {trading_signal}
+                • Confidence: {confidence:.1f}% ({confidence_level})
                 
                 **Strategy Performance:**
                 • Initial Capital: ₹{initial_capital:,}
@@ -664,9 +698,11 @@ if st.button("Predict"):
                 • MACD Histogram: {latest_histogram:.4f} - {macd_interpretation}
                 • Trend: {'📈 Uptrend (BUY)' if plot_df['MA_20'].iloc[-1] > plot_df['MA_50'].iloc[-1] else '📉 Downtrend (SELL)'}
                 
-                **Risk Metrics:**
-                • Volatility-adjusted: Sharpe Ratio > 1 is good
-                • Drawdown shows max loss: {max_drawdown * 100:.2f}%
+                **Confidence Explanation:**
+                • Volatility (30d): {volatility:.2f}%
+                • >70% = High confidence (large move)
+                • 40-70% = Medium (moderate move)
+                • <40% = Low (small move relative to volatility)
                 """)
 
 
