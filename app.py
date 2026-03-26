@@ -285,7 +285,12 @@ if st.button("Predict"):
                 close=plot_df['Close'],
                 name='OHLC',
                 increasing_line_color='green',
-                decreasing_line_color='red'
+                decreasing_line_color='red',
+                hovertemplate='<b>%{x|%a, %b %d, %Y}</b><br>' +
+                              'Open: ₹%{open:.2f}<br>' +
+                              'High: ₹%{high:.2f}<br>' +
+                              'Low: ₹%{low:.2f}<br>' +
+                              'Close: ₹%{close:.2f}<extra></extra>'
             ), row=1, col=1)
 
             # Add Moving Averages to Price chart
@@ -294,7 +299,7 @@ if st.button("Predict"):
                 y=plot_df['MA_20'],
                 name='MA 20',
                 line=dict(color='orange', width=1),
-                hovertemplate='MA 20: ₹%{y:.2f}<extra></extra>'
+                hovertemplate='<b>%{x|%a, %b %d, %Y}</b><br>MA 20: ₹%{y:.2f}<extra></extra>'
             ), row=1, col=1)
 
             fig.add_trace(go.Scatter(
@@ -302,7 +307,7 @@ if st.button("Predict"):
                 y=plot_df['MA_50'],
                 name='MA 50',
                 line=dict(color='blue', width=1),
-                hovertemplate='MA 50: ₹%{y:.2f}<extra></extra>'
+                hovertemplate='<b>%{x|%a, %b %d, %Y}</b><br>MA 50: ₹%{y:.2f}<extra></extra>'
             ), row=1, col=1)
 
             # ========== BUY/SELL MARKERS (on price chart) ==========
@@ -339,7 +344,7 @@ if st.button("Predict"):
                 y=plot_df['Volume'],
                 name='Volume',
                 marker=dict(color=colors, opacity=0.5),
-                hovertemplate='Volume: %{y:.0f}<extra></extra>',
+                hovertemplate='<b>%{x|%a, %b %d, %Y}</b><br>Volume: %{y:,.0f}<extra></extra>',
                 showlegend=False
             ), row=2, col=1)
 
@@ -349,7 +354,7 @@ if st.button("Predict"):
                 y=plot_df['RSI'],
                 name='RSI (14)',
                 line=dict(color='purple', width=2),
-                hovertemplate='RSI: %{y:.2f}<extra></extra>'
+                hovertemplate='<b>%{x|%a, %b %d, %Y}</b><br>RSI: %{y:.2f}<extra></extra>'
             ), row=3, col=1)
 
             # Add RSI levels (30 and 70)
@@ -364,7 +369,7 @@ if st.button("Predict"):
                 y=plot_df['MACD'],
                 name='MACD',
                 line=dict(color='blue', width=2),
-                hovertemplate='MACD: %{y:.2f}<extra></extra>'
+                hovertemplate='<b>%{x|%a, %b %d, %Y}</b><br>MACD: %{y:.2f}<extra></extra>'
             ), row=4, col=1)
 
             fig.add_trace(go.Scatter(
@@ -372,7 +377,7 @@ if st.button("Predict"):
                 y=plot_df['MACD_Signal'],
                 name='MACD Signal Line',
                 line=dict(color='red', width=1, dash='dash'),
-                hovertemplate='MACD Signal: %{y:.2f}<extra></extra>'
+                hovertemplate='<b>%{x|%a, %b %d, %Y}</b><br>MACD Signal: %{y:.2f}<extra></extra>'
             ), row=4, col=1)
 
             fig.add_trace(go.Bar(
@@ -380,7 +385,7 @@ if st.button("Predict"):
                 y=plot_df['Histogram'],
                 name='Histogram',
                 marker=dict(color=[('green' if h > 0 else 'red') for h in plot_df['Histogram']], opacity=0.3),
-                hovertemplate='Histogram: %{y:.2f}<extra></extra>',
+                hovertemplate='<b>%{x|%a, %b %d, %Y}</b><br>Histogram: %{y:.2f}<extra></extra>',
                 showlegend=False
             ), row=4, col=1)
 
@@ -390,7 +395,7 @@ if st.button("Predict"):
             fig.update_yaxes(title_text="RSI", row=3, col=1)
             fig.update_yaxes(title_text="MACD", row=4, col=1)
             
-            # X-axis with range selector
+            # X-axis with range selector and date formatting
             fig.update_xaxes(
                 rangeslider_visible=False,
                 rangeselector=dict(
@@ -402,6 +407,7 @@ if st.button("Predict"):
                         dict(step="all", label="All")
                     ])
                 ),
+                tickformat='%b %d\n%Y',  # Format: "Mar 27\n2026"
                 row=4, col=1
             )
 
@@ -708,4 +714,3 @@ if st.button("Predict"):
 
 # Footer
 st.markdown("---")
-st.caption("Built using Machine Learning & Deep Learning")
