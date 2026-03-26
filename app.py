@@ -522,10 +522,10 @@ if st.button("Predict"):
             try:
                 model = load_model("lstm_model.h5")
             except FileNotFoundError:
-                st.error("❌ LSTM model not found. Please train the model first.")
+                st.error("Model file not found. Please ensure lstm_model.h5 is in the project directory.")
                 st.stop()
             except Exception as e:
-                st.error(f"❌ Error loading model: {str(e)}")
+                st.error(f"Error loading model: {str(e)}")
                 st.stop()
 
             predictions = model.predict(X, verbose=0)
