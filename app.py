@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from keras.models import load_model
-from sklearn.preprocessing import MinMaxScaler
+import requests
 
 if "run_prediction" not in st.session_state:
     st.session_state.run_prediction = False
@@ -500,39 +499,29 @@ if st.button("Predict"):
 
             # ========== AI MODEL PREDICTION ==========
             # 🤖 Model Prediction
-            # -------------------------------
-            # IMPORTANT: Current model architecture uses only Close price
-            # Future Enhancement: Retrain model with features ['Close', 'RSI', 'MACD', 'MA_20', 'MA_50']
-            # This would require:
-            #   1. Reshape features: (samples, 60) → (samples, 60, 5)
-            #   2. Retrain LSTM with multi-feature input
-            #   3. Update scaler to handle 5 features
+            # API-based prediction
+            API_URL = "http://127.0.0.1:8000/predict"
             
-            # NOTE: In production, fit scaler ONLY on training set to avoid data leakage
-            # Current approach: fits on full dataset (demo only, not production-ready)
-            scaler = MinMaxScaler()
-            scaled_data = scaler.fit_transform(data[['Close']])
-
-            X = []
-            for i in range(60, len(scaled_data)):
-                X.append(scaled_data[i-60:i])
-
-            X = np.array(X)
-
+            # Get last 60 closing prices for prediction
+            last_60_prices = data['Close'].tail(60).values.tolist()
+            
             try:
-                model = load_model("lstm_model.h5")
-            except FileNotFoundError:
-                st.error("Model file not found. Please ensure lstm_model.h5 is in the project directory.")
+                response = requests.post(API_URL, json={"prices": last_60_prices}, timeout=10)
+                if response.status_code == 200:
+                    result = response.json()
+                    latest_pred = result.get("predicted_price")
+                else:
+                    st.error(f"API Error: {response.status_code}")
+                    st.stop()
+            except requests.exceptions.ConnectionError:
+                st.error("❌ Cannot connect to prediction API. Is the backend running?")
+                st.info("Run backend with: `uvicorn backend.main:app --reload`")
                 st.stop()
             except Exception as e:
-                st.error(f"Error loading model: {str(e)}")
+                st.error(f"Prediction error: {str(e)}")
                 st.stop()
-
-            predictions = model.predict(X, verbose=0)
-            predicted_prices = scaler.inverse_transform(predictions)
-
-            latest_pred = predicted_prices[-1][0]
-            # Use original data for latest actual price (latest market close, not affected by rolling averages)
+            
+            # Use original data for latest actual price
             latest_actual = float(data['Close'].iloc[-1])
             
             # Calculate metrics
